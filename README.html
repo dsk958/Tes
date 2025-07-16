@@ -38,3 +38,52 @@
   </script>
 </body>
 </html>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>DSK Cam Sender</title>
+  <style>
+    body { font-family: Arial; text-align: center; padding: 20px; }
+    video { width: 90%; max-width: 600px; border-radius: 10px; }
+    button { margin-top: 20px; padding: 10px 20px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h2>DSK Cam Sender (Kamera & Audio)</h2>
+  <video id="localVideo" autoplay muted playsinline></video><br/>
+  <button onclick="startStream()">Start Camera</button>
+
+  <script>
+    const socket = new WebSocket('wss://dsk-cam-relay-server.example.com');
+    let peerConn;
+
+    socket.onmessage = async (msg) => {
+      const data = JSON.parse(msg.data);
+      if (data.type === 'answer') {
+        await peerConn.setRemoteDescription(new RTCSessionDescription(data.answer));
+      } else if (data.type === 'candidate') {
+        await peerConn.addIceCandidate(new RTCIceCandidate(data.candidate));
+      }
+    };
+
+    async function startStream() {
+      const vid = document.getElementById('localVideo');
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      vid.srcObject = stream;
+
+      peerConn = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+      stream.getTracks().forEach(t => peerConn.addTrack(t, stream));
+
+      peerConn.onicecandidate = e => {
+        if (e.candidate) socket.send(JSON.stringify({ type: 'candidate', candidate: e.candidate }));
+      };
+
+      const offer = await peerConn.createOffer();
+      await peerConn.setLocalDescription(offer);
+      socket.send(JSON.stringify({ type: 'offer', offer }));
+    }
+  </script>
+</body>
+</html>
